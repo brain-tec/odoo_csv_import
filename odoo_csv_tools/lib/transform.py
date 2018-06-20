@@ -8,15 +8,15 @@ import os
 
 from collections import OrderedDict
 
-from internal.csv_reader import UnicodeReader
-from internal.tools import ReprWrapper, AttributeLineDict
-from odoo_csv_tools.lib.internal.io import write_file
-from internal.exceptions import SkippingException
-import mapper
+from . internal.csv_reader import UnicodeReader
+from . internal.tools import ReprWrapper, AttributeLineDict
+from . internal.io import write_file, is_string, open_read
+from . internal.exceptions import SkippingException
+from . import mapper
 
 
 class Processor(object):
-    def __init__(self, filename=None, delimiter=";", encoding='utf-8-sig', header=None, data=None, preprocess=lambda header, data: (header, data)):
+    def __init__(self, filename=None, delimiter=";", encoding='utf-8-sig', header=None, data=None, preprocess=lambda header, data: (header, data), conf_file=False):
         self.file_to_write = OrderedDict()
         if header and data:
             self.header = header
@@ -26,14 +26,15 @@ class Processor(object):
         else:
             raise Exception("No Filename nor header and data provided")
         self.header, self.data = preprocess(self.header, self.data)
+        self.conf_file = conf_file
 
     def check(self, check_fun, message=None):
         res = check_fun(self.header, self.data)
         if not res:
             if message:
-                print message
+                print(message)
             else:
-                print "%s failed" % check_fun.__name__
+                print("%s failed" % check_fun.__name__)
         return res
 
     def split(self, split_fun):
@@ -84,6 +85,7 @@ class Processor(object):
                 'fail' : fail,
                 'python_exe' : python_exe,
                 'path' : path,
+                'conf_file' : self.conf_file,
             })
 
             write_file(**info_copy)
@@ -98,9 +100,9 @@ class Processor(object):
     #                                      #
     ########################################
     def __read_file(self, filename, delimiter, encoding):
-        file_ref = open(filename, 'r')
-        reader = UnicodeReader(file_ref, delimiter=delimiter, encoding='utf-8-sig')
-        head = reader.next()
+        file_ref = open_read(filename, encoding=encoding)
+        reader = UnicodeReader(file_ref, delimiter=delimiter, encoding=encoding)
+        head = next(reader)
         data = [d for d in reader]
         return head, data
 
@@ -116,8 +118,8 @@ class Processor(object):
                 line_out = [mapping[k](line_dict) for k in mapping.keys()]
             except SkippingException as e:
                 if verbose:
-                    print "Skipping", i
-                    print e.message
+                    print("Skipping", i)
+                    print(e.message)
                 continue
             if t == 'list':
                 lines_out.append(line_out)
@@ -167,7 +169,7 @@ class ProductProcessorV9(Processor):
         """
         def add_value_line(values_out, line):
             for att in attributes_list:
-                value_name = line[mapping.keys().index('name')].get(att)
+                value_name = line[list(mapping.keys()).index('name')].get(att)
                 if value_name:
                     line_value = [ele[att] if isinstance(ele, dict) else ele for ele in line]
                     values_out.add(tuple(line_value))
