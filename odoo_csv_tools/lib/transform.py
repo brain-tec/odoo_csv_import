@@ -2,7 +2,7 @@
 '''
 Created on 10 sept. 2016
 
-@author: mythrys
+@author: Thibault Francois
 '''
 import os
 
@@ -16,7 +16,7 @@ from . import mapper
 
 
 class Processor(object):
-    def __init__(self, filename=None, delimiter=";", encoding='utf-8-sig', header=None, data=None, preprocess=lambda header, data: (header, data), conf_file=False):
+    def __init__(self, filename=None, delimiter=";", encoding='utf-8', header=None, data=None, preprocess=lambda header, data: (header, data), conf_file=False):
         self.file_to_write = OrderedDict()
         if header and data:
             self.header = header
@@ -74,7 +74,7 @@ class Processor(object):
         self._add_data(head, data, filename_out, import_args)
         return head, data
 
-    def write_to_file(self, script_filename, fail=True, append=False, python_exe='python', path='./'):
+    def write_to_file(self, script_filename, fail=True, append=False, python_exe='', path='', encoding='utf-8'):
         init = not append
         for _, info in self.file_to_write.items():
             info_copy = dict(info)
@@ -86,6 +86,7 @@ class Processor(object):
                 'python_exe' : python_exe,
                 'path' : path,
                 'conf_file' : self.conf_file,
+                'encoding': encoding,
             })
 
             write_file(**info_copy)
@@ -93,6 +94,51 @@ class Processor(object):
 
     def get_processed_data(self, filename_out):
         return self.file_to_write[filename_out]
+
+    def join_file(self, filename, master_key, child_key, header_prefix="child", delimiter=";", encoding='utf-8'):
+        """
+            Join another file with the main file defined in the constructor.
+            Need a key (column name) on the master file  and on the file to join
+            The line of the file to join will be added a the end of a line if
+                the value of the column master_key match the value of the column child_key
+
+            If the key is not found in the file to join, empty cell are added at the end of the master file
+
+            A prefix is added (after the merge operation) to all the column of the child file
+            to avoid collision with the header of the master file
+
+            E.g.: join_file(filename, 'category_id', 'name')
+            Master file            |      Child file
+            name  category_id      |      name   color
+            A      A               |      A      Blue
+            B      A               |      B      Red
+            C      B
+            D      B
+            E      C
+
+            Final File
+            name  category_id child_name child_color
+            A      A          A           Blue
+            B      A          A           Blue
+            C      B          B           Red
+            D      B          B           Red
+            E      C                               
+        """
+        header, data = self.__read_file(filename, delimiter, encoding)
+        child_key_pos = header.index(child_key)
+        master_key_pos = self.header.index(master_key)
+
+        data_map = {}
+        for d in data:
+            data_map[d[child_key_pos]] = d
+
+        for d in self.data:
+            if data_map.get(d[master_key_pos]):
+                d.extend(data_map[d[master_key_pos]])
+            else:
+                d.extend([""] * len(header))
+
+        self.header += ["%s_%s" % (header_prefix, h) for h in header]
 
     ########################################
     #                                      #
